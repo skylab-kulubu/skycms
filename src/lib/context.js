@@ -31,6 +31,10 @@ import { createContext, useContext } from "react";
  * @property {() => void} triggerRefetch
  * @property {((slug: string) => void | Promise<void>) | null} onAfterSave  Called after a successful save (typically a Server Action that calls `revalidateTag(cmsCacheTag(slug))`).
  * @property {(() => Promise<string>) | null} getAccessToken  Returns the current user's JWT access token; added as `Authorization: Bearer {token}` on write requests. Null in public/demo mode.
+ * @property {boolean} isDrawerOpen      Admin-only: whether the editor drawer is expanded.
+ * @property {(open: boolean) => void} setDrawerOpen  Admin-only: toggle the drawer.
+ * @property {{ name: string|null, email: string|null, image: string|null } | null} userInfo  Admin-only: identity to display in the panel footer. Null when no session.
+ * @property {(() => void) | null} onSignOut  Admin-only: invoked by the panel's logout button. Null when no auth wiring.
  */
 
 /** @type {React.Context<CmsContextValue|null>} */

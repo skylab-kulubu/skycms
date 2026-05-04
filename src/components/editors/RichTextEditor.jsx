@@ -6,6 +6,8 @@
  * exercised end-to-end.
  */
 
+import { fieldStyle, labelStyle, labelTextStyle } from "./styles.js";
+
 /**
  * @param {Object} props
  * @param {string} props.value
@@ -13,21 +15,20 @@
  */
 export function RichTextEditor({ value, onChange }) {
   return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <span style={{ fontSize: 12, color: "#6b7280" }}>
-        Rich text (HTML - WYSIWYG coming soon)
-      </span>
+    <label style={labelStyle}>
+      <span style={labelTextStyle}>Zengin Metin · HTML</span>
       <textarea
+        className="skylab-cms-field"
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         rows={8}
         style={{
-          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-          fontSize: 13,
-          padding: 8,
-          border: "1px solid #d1d5db",
-          borderRadius: 4,
+          ...fieldStyle,
+          fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
+          fontSize: 12,
+          lineHeight: 1.6,
           resize: "vertical",
+          minHeight: 140,
         }}
       />
     </label>

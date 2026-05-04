@@ -24,10 +24,16 @@
   "files": [
     "dist"
   ],
+  "workspaces": [
+    "example"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "framer-motion": "^11.11.0"
   },
   "peerDependencies": {
     "next": "^14.0.0 || ^15.0.0",

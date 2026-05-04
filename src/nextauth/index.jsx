@@ -11,8 +11,8 @@
  * admin saves include a valid `Authorization: Bearer` header automatically.
  */
 
-import { SessionProvider, useSession } from "next-auth/react";
-import { useCallback } from "react";
+import { SessionProvider, signOut, useSession } from "next-auth/react";
+import { useCallback, useMemo } from "react";
 
 import { CmsProvider } from "../index.js";
 
@@ -41,10 +41,31 @@ function Inner({ config, isAdmin, userSub, initialBlocks, onAfterSave, children 
     [session?.accessToken],
   );
 
+  // Surface identity for the admin panel footer. Re-build only when the
+  // underlying values change so CmsProvider's memo doesn't bust on every
+  // render of this component.
+  const userInfo = useMemo(
+    () =>
+      session?.user
+        ? {
+            name: session.user.name ?? null,
+            email: session.user.email ?? null,
+            image: session.user.image ?? null,
+          }
+        : null,
+    [session?.user?.name, session?.user?.email, session?.user?.image],
+  );
+
+  const onSignOut = useCallback(() => {
+    signOut({ callbackUrl: "/" });
+  }, []);
+
   return (
     <CmsProvider config={config} isAdmin={isAdmin} userSub={userSub}
       initialBlocks={initialBlocks} onAfterSave={onAfterSave}
       getAccessToken={isAdmin ? getAccessToken : undefined}
+      userInfo={userInfo}
+      onSignOut={onSignOut}
     >
       {children}
     </CmsProvider>
