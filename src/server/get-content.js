@@ -14,6 +14,8 @@ import { fetchContent, fetchDataSources, fetchSource, syncManifest } from "../li
 
 import { getClientCredentialsToken } from "./service-token.js";
 
+export { discoverManifests } from "./discover.js";
+
 /**
  * @import { CmsConfig } from "../lib/config.js"
  * @import { BlockResponse, ContentResponse, SyncManifestRequest, SyncResultResponse } from "../lib/schemas.js"

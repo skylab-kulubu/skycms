@@ -36,6 +36,17 @@ import { useCmsContext } from "../lib/context.js";
  * @typedef {Object} EditableRegionProps
  * @property {string} blockPath
  * @property {string} [as]   Wrapper tag for Text / RichText (default: "span" / "div"). Ignored for Image and Link when the block has a value.
+ * @property {import("../lib/schemas.js").BlockType} [blockType]
+ *   Discovery-time metadata. Read by the manifest discovery script (AST scan
+ *   of `<EditableRegion>` JSX), not by the runtime. The script needs both
+ *   `blockType` and `defaultValue` to produce a `ManifestBlockItem`. Omit and
+ *   the discovery script will skip this region with a warning - which means
+ *   no DB row, which means the region renders the empty placeholder forever.
+ * @property {*} [defaultValue]
+ *   Discovery-time metadata. The `defaultValue` written to the DB on first
+ *   sync. Same caveat as `blockType` - omit and the region won't be synced.
+ *   Must be a static literal in the JSX (the AST scanner can't evaluate
+ *   expressions or imported values).
  */
 
 const RING_HOVER   = "0 0 0 1.5px rgba(201,184,150,0.30)";
@@ -56,7 +67,12 @@ const BLOCK_TAGS = new Set([
 /**
  * @param {EditableRegionProps & Record<string, *>} props
  */
-export function EditableRegion({ blockPath, as, ...rest }) {
+// `blockType` / `defaultValue` are discovery-only metadata read by the
+// AST scanner, not by the runtime. They're destructured under aliases so
+// (a) they don't leak into ...rest (which would dump them onto DOM nodes)
+// and (b) they don't shadow the local `blockType` const computed below.
+// eslint-disable-next-line no-unused-vars
+export function EditableRegion({ blockPath, as, blockType: _bt, defaultValue: _dv, ...rest }) {
   const { isAdmin, blocks, drafts, activeBlock, setActiveBlock } = useCmsContext();
   const [isHovered, setIsHovered] = useState(false);
 

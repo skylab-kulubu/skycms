@@ -28,10 +28,23 @@ import { useCmsAdmin } from "./use-cms-admin.js";
  */
 
 /**
+ * @typedef {Object} UseCmsBlockMeta
+ * @property {import("../lib/schemas.js").BlockType} blockType
+ * @property {*} defaultValue
+ *
+ * Discovery-time metadata only - the AST-walking manifest scanner reads
+ * this second argument to register read-only blocks (no `<EditableRegion>`
+ * on the page) into the sync manifest. Runtime ignores it. Pass static
+ * literals; the scanner can't evaluate variables or imported values.
+ */
+
+/**
  * @param {string} blockPath
+ * @param {UseCmsBlockMeta} [_meta]  Discovery-only metadata; runtime no-op.
  * @returns {UseCmsBlockResult}
  */
-export function useCmsBlock(blockPath) {
+export function useCmsBlock(blockPath, _meta) {
+  void _meta;
   const { blocks } = useCmsContext();
   const { save } = useCmsAdmin();
 
