@@ -101,7 +101,7 @@ export function createCmsPage(options) {
 
     return (
       <Provider config={config} isAdmin={deriveAdmin(session)} userSub={deriveUserSub(session)}
-        initialBlocks={initialBlocks} onAfterSave={onAfterSave}
+        initialBlocks={initialBlocks} onAfterSave={onAfterSave} session={session}
       >
         {children}
       </Provider>

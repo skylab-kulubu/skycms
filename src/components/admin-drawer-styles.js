@@ -142,8 +142,8 @@ export const statusPillStyle = {
   alignItems: "center",
   gap: 5,
   fontSize: 11,
-  padding: "3px 8px",
-  borderRadius: 6,
+  padding: "5px",
+  borderRadius: 99,
   background: SURFACE_2,
   color: "rgba(255,255,255,0.6)",
   border: `1px solid ${BORDER}`,
@@ -271,8 +271,7 @@ export const blockResetStyle = {
   alignItems: "center",
   justifyContent: "center",
   background: "transparent",
-  color: TEXT_MUTED,
-  border: `1px solid ${BORDER}`,
+  border: 0,
   borderRadius: 5,
   cursor: "pointer",
   padding: 0,
@@ -326,9 +325,8 @@ export const iconActionStyle = {
   gap: 6,
   padding: "7px 10px",
   borderRadius: 7,
-  background: SURFACE_2,
-  border: `1px solid ${BORDER}`,
-  color: TEXT_SECONDARY,
+  background: "transparent",
+  border: 0,
   fontSize: 12,
   fontWeight: 500,
   fontFamily: "inherit",
@@ -373,13 +371,13 @@ export const handleButtonStyle = {
   transform: `translateX(calc(100% - ${HANDLE_OVERLAP}px))`,
   width: HANDLE_WIDTH,
   height: "100%",
-  background: PRIMARY_500,
+  background: PRIMARY_600,
   border: 0,
   borderTop: `1px solid ${BORDER}`,
   borderRight: `1px solid ${BORDER}`,
   borderBottom: `1px solid ${BORDER}`,
-  borderTopRightRadius: 3,
-  borderBottomRightRadius: 3,
+  borderTopRightRadius: 10,
+  borderBottomRightRadius: 10,
   cursor: "pointer",
   display: "flex",
   alignItems: "center",
@@ -463,8 +461,7 @@ export const signOutButtonStyle = {
   width: 28,
   height: 28,
   background: "transparent",
-  border: `1px solid ${BORDER}`,
-  color: TEXT_MUTED,
+  border: 0,
   borderRadius: 6,
   cursor: "pointer",
   display: "inline-flex",
@@ -533,23 +530,24 @@ export const panelCss = `
     box-shadow: inset 2px 0 0 0 ${ACCENT};
   }
   .skylab-cms-icon-button {
-    transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+    color: ${TEXT_MUTED};
+    transition: color 140ms ease, filter 140ms ease;
   }
   .skylab-cms-icon-button:hover:not(:disabled) {
-    background-color: ${SURFACE_2};
-    color: ${TEXT_PRIMARY};
-    border-color: ${BORDER_STRONG};
+    color: ${ACCENT};
+    filter: drop-shadow(0 0 5px rgba(201, 184, 150, 0.45));
   }
   .skylab-cms-icon-button:disabled {
     opacity: 0.4;
     cursor: not-allowed;
   }
   .skylab-cms-icon-action {
-    transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+    color: ${TEXT_MUTED};
+    transition: color 120ms ease, filter 120ms ease;
   }
   .skylab-cms-icon-action:hover:not(:disabled) {
-    background-color: ${SURFACE_2};
-    color: ${TEXT_PRIMARY};
+    color: ${ACCENT};
+    filter: drop-shadow(0 0 5px rgba(201, 184, 150, 0.45));
   }
   .skylab-cms-icon-action-primary {
     background: #ffffff !important;
@@ -582,12 +580,12 @@ export const panelCss = `
     filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.55));
   }
   .skylab-cms-logout {
-    transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+    color: ${TEXT_MUTED};
+    transition: color 120ms ease, filter 120ms ease;
   }
   .skylab-cms-logout:hover:not(:disabled) {
-    background-color: ${SURFACE_2};
-    color: ${TEXT_PRIMARY};
-    border-color: ${BORDER_STRONG};
+    color: ${ACCENT};
+    filter: drop-shadow(0 0 5px rgba(201, 184, 150, 0.45));
   }
   .skylab-cms-logout:disabled { opacity: 0.4; cursor: not-allowed; }
   input.skylab-cms-field, textarea.skylab-cms-field {

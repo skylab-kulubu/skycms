@@ -25,14 +25,14 @@ import { updateContent, CmsApiError } from "../lib/api-client.js";
  * @property {boolean} isSaving
  * @property {CmsApiError|Error|null} error
  * @property {UpdatePageResponse|null} lastResult
- * @property {boolean} canSave  False when not admin or no userSub.
+ * @property {boolean} canSave  False when not admin.
  */
 
 /**
  * @returns {UseCmsAdminResult}
  */
 export function useCmsAdmin() {
-  const { config, isAdmin, userSub, triggerRefetch, onAfterSave, getAccessToken } =
+  const { config, isAdmin, triggerRefetch, onAfterSave, getAccessToken } =
     useCmsContext();
   const pathname = usePathname() ?? "/";
 
@@ -42,7 +42,7 @@ export function useCmsAdmin() {
     /** @type {UpdatePageResponse|null} */ (null),
   );
 
-  const canSave = isAdmin && Boolean(userSub);
+  const canSave = isAdmin;
 
   const savePage = useCallback(
     /**
@@ -51,7 +51,7 @@ export function useCmsAdmin() {
      */
     async (blocks) => {
       if (!canSave) {
-        const err = new Error(isAdmin ? "Cannot save: missing userSub" : "Cannot save: not in admin mode");
+        const err = new Error("Cannot save: not in admin mode");
         setError(err);
         throw err;
       }
@@ -61,7 +61,6 @@ export function useCmsAdmin() {
         const accessToken = await getAccessToken();
         const result = await updateContent(
           config,
-          /** @type {string} */ (userSub),
           { slug: pathname, blocks },
           accessToken || undefined,
         );
@@ -90,7 +89,7 @@ export function useCmsAdmin() {
         setIsSaving(false);
       }
     },
-    [canSave, isAdmin, config, userSub, pathname, triggerRefetch, onAfterSave, getAccessToken],
+    [canSave, isAdmin, config, pathname, triggerRefetch, onAfterSave, getAccessToken],
   );
 
   const save = useCallback(

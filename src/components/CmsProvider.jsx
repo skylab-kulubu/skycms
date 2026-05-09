@@ -68,6 +68,12 @@ export function CmsProvider({
   );
   const [refetchToken, setRefetchToken] = useState(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  // Per-blockPath unsaved edits. Lives here (rather than in AdminDrawer) so
+  // EditableRegion can read live draft values for inline preview while the
+  // user types. Cleared on save / discard / navigation.
+  const [drafts, setDraftsState] = useState(
+    /** @returns {Map<string, *>} */ (() => new Map()),
+  );
 
   // Sync the blocks map when `initialBlocks` arrives with new content (e.g.
   // when client-side navigation triggers a server re-render of `<CmsPage>`
@@ -79,6 +85,7 @@ export function CmsProvider({
     initialBlocksRef.current = initialBlocks;
     setBlocksState(indexBlocksByPath(initialBlocks ?? []));
     setActiveBlock(null);
+    setDraftsState(new Map());
   }, [initialBlocks]);
 
   // Backstop: the root layout's `<CmsPage>` is preserved across client-side
@@ -94,8 +101,28 @@ export function CmsProvider({
     lastPathnameRef.current = pathname;
     setBlocksState(new Map());
     setActiveBlock(null);
+    setDraftsState(new Map());
     setRefetchToken((n) => n + 1);
   }, [pathname]);
+
+  // Drop drafts for blocks that no longer exist (e.g. after a manifest sync
+  // that removed the block). Pathname-change drafts are already cleared by
+  // the effect above; this catches the manifest-sync case.
+  useEffect(() => {
+    setDraftsState((prev) => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Map();
+      for (const [path, value] of prev) {
+        if (blocks.has(path)) {
+          next.set(path, value);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [blocks]);
 
   // Stash callbacks in refs so changes to the props don't bust the
   // memoised context value (server actions are stable references in
@@ -121,6 +148,35 @@ export function CmsProvider({
 
   const triggerRefetch = useCallback(() => {
     setRefetchToken((n) => n + 1);
+  }, []);
+
+  const setDraft = useCallback(
+    /** @param {string} blockPath @param {*} value */
+    (blockPath, value) => {
+      setDraftsState((prev) => {
+        const next = new Map(prev);
+        next.set(blockPath, value);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const clearDraft = useCallback(
+    /** @param {string} blockPath */
+    (blockPath) => {
+      setDraftsState((prev) => {
+        if (!prev.has(blockPath)) return prev;
+        const next = new Map(prev);
+        next.delete(blockPath);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const clearDrafts = useCallback(() => {
+    setDraftsState((prev) => (prev.size === 0 ? prev : new Map()));
   }, []);
 
   const setDrawerOpen = useCallback(
@@ -176,6 +232,10 @@ export function CmsProvider({
       userSub,
       blocks,
       setBlocks,
+      drafts,
+      setDraft,
+      clearDraft,
+      clearDrafts,
       activeBlock,
       setActiveBlock: setActiveBlockGuarded,
       refetchToken,
@@ -193,6 +253,10 @@ export function CmsProvider({
       userSub,
       blocks,
       setBlocks,
+      drafts,
+      setDraft,
+      clearDraft,
+      clearDrafts,
       activeBlock,
       setActiveBlockGuarded,
       refetchToken,

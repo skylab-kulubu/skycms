@@ -25,6 +25,10 @@ import { createContext, useContext } from "react";
  * @property {string|null} userSub
  * @property {Map<string, BlockResponse>} blocks
  * @property {(updater: (prev: Map<string, BlockResponse>) => Map<string, BlockResponse>) => void} setBlocks
+ * @property {Map<string, *>} drafts                 Per-blockPath unsaved edits; EditableRegion reads these for live preview while admins type.
+ * @property {(blockPath: string, value: *) => void} setDraft
+ * @property {(blockPath: string) => void} clearDraft
+ * @property {() => void} clearDrafts
  * @property {string|null} activeBlock
  * @property {(blockPath: string|null) => void} setActiveBlock
  * @property {number} refetchToken      Bumped to force `useCmsContent` to refetch.

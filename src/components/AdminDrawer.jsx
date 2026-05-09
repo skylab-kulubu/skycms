@@ -25,7 +25,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 
 import { useCmsContext } from "../lib/context.js";
@@ -98,6 +98,10 @@ export function AdminDrawer() {
     activeBlock,
     setActiveBlock,
     blocks,
+    drafts,
+    setDraft,
+    clearDraft,
+    clearDrafts,
     isDrawerOpen,
     setDrawerOpen,
     userInfo,
@@ -111,53 +115,10 @@ export function AdminDrawer() {
     [blocks],
   );
 
-  // Per-blockPath drafts. Only paths the user has actually touched land here;
-  // unmodified blocks read straight from `blocks`. Cleared on save / discard.
-  const [drafts, setDrafts] = useState(
-    /** @type {Map<string, *>} */ (new Map()),
-  );
-
-  // Drop drafts for blocks that no longer exist (e.g. after manifest sync or
-  // a slug change). Keep drafts for blocks whose version changed but the user
-  // hasn't acted yet - on next render the conflict surfaces via the save call.
-  useEffect(() => {
-    setDrafts((prev) => {
-      let changed = false;
-      const next = new Map();
-      for (const [path, value] of prev) {
-        if (blocks.has(path)) {
-          next.set(path, value);
-        } else {
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [blocks]);
-
   // Auto-open the panel when an EditableRegion in the page is clicked.
   useEffect(() => {
     if (activeBlock && !isDrawerOpen) setDrawerOpen(true);
   }, [activeBlock, isDrawerOpen, setDrawerOpen]);
-
-  /** @param {string} blockPath @param {*} value */
-  const setDraft = (blockPath, value) => {
-    setDrafts((prev) => {
-      const next = new Map(prev);
-      next.set(blockPath, value);
-      return next;
-    });
-  };
-
-  /** @param {string} blockPath */
-  const clearDraft = (blockPath) => {
-    setDrafts((prev) => {
-      if (!prev.has(blockPath)) return prev;
-      const next = new Map(prev);
-      next.delete(blockPath);
-      return next;
-    });
-  };
 
   // Build the list of dirty updates. A draft is "dirty" if its serialised
   // form differs from the saved value - JSON.stringify works for both
@@ -182,11 +143,7 @@ export function AdminDrawer() {
     if (dirtyCount === 0) return;
     try {
       await savePage(dirtyUpdates);
-      setDrafts((prev) => {
-        const next = new Map(prev);
-        for (const u of dirtyUpdates) next.delete(u.blockPath);
-        return next;
-      });
+      for (const u of dirtyUpdates) clearDraft(u.blockPath);
       setActiveBlock(null);
     } catch {
       // Error surfaced via useCmsAdmin().error - keep drafts intact so the
@@ -195,10 +152,11 @@ export function AdminDrawer() {
   };
 
   const onDiscardAll = () => {
-    setDrafts(new Map());
+    clearDrafts();
   };
 
   const isConflict = error instanceof CmsApiError && error.isConflict;
+  const isForbidden = error instanceof CmsApiError && error.isForbidden;
   const breadcrumbs = pathnameToBreadcrumbs(pathname);
 
   return (
@@ -227,7 +185,9 @@ export function AdminDrawer() {
             <div style={isConflict ? conflictStyle : errorStyle}>
               {isConflict
                 ? "Bir blok başka biri tarafından güncellendi. En son sürüm yüklendi - kontrol edip tekrar dene."
-                : (error.message ?? "Kaydedilemedi")}
+                : isForbidden
+                  ? "Yetkiniz yok. Bu içeriği düzenleme izniniz bulunmuyor."
+                  : (error.message ?? "Kaydedilemedi")}
             </div>
           ) : null}
 
@@ -321,7 +281,6 @@ function PanelHeader({ breadcrumbs, dirty }) {
               background: dirty ? ACCENT : "rgba(255,255,255,0.3)",
             }}
           />
-          {dirty ? "Düzenleniyor" : "Taslak"}
         </span>
       </div>
     </header>
@@ -466,11 +425,23 @@ function BlockCard({ block, draft, hasDraft, isActive, onChange, onReset, onFocu
         <TypeChip type={block.blockType} />
       </div>
       
-      {isOpen && (
-        <div style={blockBodyStyle} onMouseDown={onFocus}>
-          {renderEditor(block, value, onChange)}
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            key="body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.32, 0.72, 0.18, 1] }}
+            style={{ overflow: "hidden" }}
+            onMouseDown={onFocus}
+          >
+            <div style={blockBodyStyle}>
+              {renderEditor(block, value, onChange)}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

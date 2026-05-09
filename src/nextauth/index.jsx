@@ -11,8 +11,8 @@
  * admin saves include a valid `Authorization: Bearer` header automatically.
  */
 
-import { SessionProvider, signOut, useSession } from "next-auth/react";
-import { useCallback, useMemo } from "react";
+import { SessionProvider, signIn, signOut, useSession } from "next-auth/react";
+import { useCallback, useEffect, useMemo } from "react";
 
 import { CmsProvider } from "../index.js";
 
@@ -35,6 +35,10 @@ import { CmsProvider } from "../index.js";
  */
 function Inner({ config, isAdmin, userSub, initialBlocks, onAfterSave, children }) {
   const { data: session } = useSession();
+
+  useEffect(() => {
+    if (session?.error === "RefreshAccessTokenError") signIn();
+  }, [session?.error]);
 
   const getAccessToken = useCallback(
     async () => /** @type {string} */ (session?.accessToken ?? ""),
@@ -87,12 +91,13 @@ function Inner({ config, isAdmin, userSub, initialBlocks, onAfterSave, children 
  *   userSub: string | null,
  *   initialBlocks?: BlockResponse[],
  *   onAfterSave?: (slug: string) => void | Promise<void>,
+ *   session?: import("next-auth").Session | null,
  *   children: React.ReactNode,
  * }} props
  */
-export function NextAuthCmsProvider(props) {
+export function NextAuthCmsProvider({ session, ...props }) {
   return (
-    <SessionProvider>
+    <SessionProvider session={session}>
       <Inner {...props} />
     </SessionProvider>
   );

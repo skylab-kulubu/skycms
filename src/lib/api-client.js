@@ -50,11 +50,13 @@ export class CmsApiError extends Error {
   get isNotFound() {
     return this.status === 404;
   }
+
+  get isForbidden() {
+    return this.status === 403;
+  }
 }
 
 /**
- * Build common headers. GET-only helper; PUT adds `X-User-Sub` separately.
- *
  * @param {CmsConfig} config
  * @returns {Record<string, string>}
  */
@@ -156,25 +158,21 @@ export async function fetchDataSources(config, slug, init) {
 }
 
 /**
- * `PUT /cms/content` - admin save. `userSub` is the Keycloak `sub` claim
- * (informational header). `accessToken` is the full Keycloak JWT sent as
- * `Authorization: Bearer {token}` for backend signature verification.
+ * `PUT /cms/content` - admin save. Requires a Keycloak token with `cms:access`
+ * role; the backend reads `sub` and `azp` directly from the token.
  *
- * 409 Conflict surfaces as `CmsApiError` with `isConflict === true`.
+ * 401 → token missing/invalid/expired
+ * 403 → token valid but missing `cms:access` role
+ * 409 Conflict → surfaces as `CmsApiError` with `isConflict === true`
  *
  * @param {CmsConfig} config
- * @param {string} userSub
  * @param {UpdatePageRequest} request
  * @param {string} [accessToken]
  * @returns {Promise<UpdatePageResponse>}
  */
-export async function updateContent(config, userSub, request, accessToken) {
-  if (!userSub) {
-    throw new Error("updateContent: userSub is required for write requests");
-  }
+export async function updateContent(config, request, accessToken) {
   /** @type {Record<string, string>} */
-  const extraHeaders = { "X-User-Sub": userSub };
-  if (accessToken) extraHeaders["Authorization"] = `Bearer ${accessToken}`;
+  const extraHeaders = accessToken ? { "Authorization": `Bearer ${accessToken}` } : {};
   const response = await fetch(buildUrl(config, "/content"), {
     method: "PUT",
     headers: { ...baseHeaders(config), ...extraHeaders },
@@ -202,6 +200,56 @@ export async function syncManifest(config, request, accessToken) {
   });
   if (!response.ok) throw await toApiError(response);
   return /** @type {SyncResultResponse} */ (await response.json());
+}
+
+/**
+ * Upload an image file via XHR so upload progress can be tracked.
+ * Endpoint: `POST {config.cdnUrl}` when configured, otherwise `POST {config.baseUrl}/cms/media`.
+ * Expected response: `{ data: { url: string } }`
+ *
+ * @param {CmsConfig} config
+ * @param {File} file
+ * @param {(progress: number) => void} onProgress  Called with 0–100.
+ * @param {string|null} [accessToken]
+ * @returns {Promise<{ data: { url: string } }>}
+ */
+export function uploadImage(config, file, onProgress, accessToken) {
+  const target = config.cdnUrl ?? `${config.baseUrl}/cms/media`;
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const body = new FormData();
+    body.append("file", file);
+
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          reject(new Error("Invalid JSON in upload response"));
+        }
+      } else {
+        let detail = xhr.statusText || "Upload failed";
+        try {
+          const parsed = JSON.parse(xhr.responseText);
+          if (parsed?.detail) detail = parsed.detail;
+        } catch { /* ignore */ }
+        reject(new CmsApiError({ status: xhr.status, detail }));
+      }
+    });
+
+    xhr.addEventListener("error", () => reject(new Error("Network error")));
+    xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
+
+    xhr.open("POST", target);
+    if (config.clientId) xhr.setRequestHeader("X-CMS-Client-Id", config.clientId);
+    if (config.clientSecret) xhr.setRequestHeader("X-CMS-Client-Secret", config.clientSecret);
+    if (accessToken) xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
+    xhr.send(body);
+  });
 }
 
 /**

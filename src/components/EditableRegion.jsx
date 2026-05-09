@@ -46,12 +46,18 @@ const EMPTY_PLACEHOLDER = "-";
  * @param {EditableRegionProps & Record<string, *>} props
  */
 export function EditableRegion({ blockPath, as, ...rest }) {
-  const { isAdmin, blocks, activeBlock, setActiveBlock } = useCmsContext();
+  const { isAdmin, blocks, drafts, activeBlock, setActiveBlock } = useCmsContext();
   const [isHovered, setIsHovered] = useState(false);
 
   const block = blocks.get(blockPath);
-  const value = block ? block.value : undefined;
   const blockType = block ? block.blockType : null;
+  // Live preview: prefer the unsaved draft when the admin is mid-edit.
+  // `drafts.has` (not `??`) so an explicit empty/null draft still wins.
+  const value = drafts.has(blockPath)
+    ? drafts.get(blockPath)
+    : block
+      ? block.value
+      : undefined;
   const empty = isValueEmpty(blockType, value);
 
   const rendered = empty
