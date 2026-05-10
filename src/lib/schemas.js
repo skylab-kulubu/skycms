@@ -47,6 +47,13 @@
  * @property {number} sortOrder
  * @property {number} version    Used for optimistic concurrency.
  * @property {*|null} data       Resolved DataSource payload, else null.
+ * @property {*|null} [draftValue]
+ *   Admin-only overlay. Non-null when the backend's Redis layer holds a
+ *   pending draft for this block; in that case `value` carries the
+ *   published version and `draftValue` carries the draft. Backend
+ *   auto-cleans (sends `null`) when the two would otherwise be equal,
+ *   so any non-null `draftValue` is guaranteed to differ from `value`.
+ *   Public payloads omit / null this field.
  * @property {string} [_slug]
  *   Client-side hint stamped by the SDK after fetch so the save layer
  *   knows which slug to PUT each block back to. Not part of the wire

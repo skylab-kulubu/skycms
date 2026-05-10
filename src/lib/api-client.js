@@ -190,6 +190,30 @@ export async function updateContent(config, request, accessToken) {
 }
 
 /**
+ * `PUT /cms/draft` - admin draft autosave. Body shape is identical to
+ * `PUT /cms/content` (`UpdatePageRequest`); the backend stores the values
+ * as a Redis-overlay rather than persisting them, returns `204 No Content`,
+ * and ignores the per-block `version` field. A successful `updateContent`
+ * call clears the matching draft server-side, so callers don't need to
+ * coordinate cleanup.
+ *
+ * @param {CmsConfig} config
+ * @param {UpdatePageRequest} request
+ * @param {string} [accessToken]
+ * @returns {Promise<void>}
+ */
+export async function updateDraft(config, request, accessToken) {
+  /** @type {Record<string, string>} */
+  const extraHeaders = accessToken ? { "Authorization": `Bearer ${accessToken}` } : {};
+  const response = await fetch(buildUrl(config, "/draft"), {
+    method: "PUT",
+    headers: { ...baseHeaders(config), ...extraHeaders },
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) throw await toApiError(response);
+}
+
+/**
  * `POST /cms/sync` - deploy pipeline only. Not called from end-user flows.
  *
  * @param {CmsConfig} config

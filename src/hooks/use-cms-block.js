@@ -67,7 +67,11 @@ export function useCmsBlock(blockPath, _meta) {
   );
 
   return {
-    value: block ? block.value : undefined,
+    // Effective value: backend draft overlay wins over published. Callers
+    // that need the underlying published version (e.g. to render an
+    // "unsaved" indicator) can read `block.value` and `block.draftValue`
+    // directly off the returned `block`.
+    value: block ? (block.draftValue ?? block.value) : undefined,
     version: block ? block.version : null,
     blockType: block ? block.blockType : null,
     block,

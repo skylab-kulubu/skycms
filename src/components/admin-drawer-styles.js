@@ -44,6 +44,9 @@ export const TEXT_MUTED     = "rgba(255,255,255,0.40)";
 export const TEXT_FAINT     = "rgba(255,255,255,0.30)";
 export const ACCENT         = "#c9b896"; // secondary-400 — sage accent
 
+export const STATUS_SAVED   = "rgba(132, 204, 132, 0.85)";
+export const STATUS_FAILED  = "rgba(225, 132, 162, 0.85)";
+
 // ---------------------------------------------------------------------------
 // Layout
 // ---------------------------------------------------------------------------
@@ -143,7 +146,7 @@ export const statusPillStyle = {
   gap: 5,
   fontSize: 11,
   padding: "5px",
-  borderRadius: 99,
+  borderRadius: 6,
   background: SURFACE_2,
   color: "rgba(255,255,255,0.6)",
   border: `1px solid ${BORDER}`,
@@ -158,6 +161,14 @@ export const statusDotStyle = {
   background: TEXT_FAINT,
   flexShrink: 0,
   display: "inline-block",
+};
+
+export const statusLabelStyle = {
+  fontSize: 10.5,
+  fontWeight: 500,
+  letterSpacing: "0.02em",
+  lineHeight: 1,
+  marginTop: -1.5,
 };
 
 // ---------------------------------------------------------------------------
@@ -692,4 +703,11 @@ export const panelCss = `
     color: rgba(255,255,255,0.18);
   }
   ul[data-cms-list]::-webkit-scrollbar { display: none; }
+  @keyframes skylab-cms-status-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.4; }
+  }
+  .skylab-cms-status-pulse {
+    animation: skylab-cms-status-pulse 900ms ease-in-out 1;
+  }
 `;

@@ -45,6 +45,8 @@ import {
   ACCENT,
   TEXT_MUTED,
   TYPE_STYLES,
+  STATUS_SAVED,
+  STATUS_FAILED,
   panelStyle,
   paneContainerStyle,
   paneStyle,
@@ -58,6 +60,7 @@ import {
   pageTitleStyle,
   statusPillStyle,
   statusDotStyle,
+  statusLabelStyle,
   tabBarStyle,
   tabButtonStyle,
   tabButtonActiveStyle,
@@ -116,6 +119,7 @@ export function AdminDrawer() {
     itemSchemas,
     userInfo,
     onSignOut,
+    draftSyncStatus,
   } = useCmsContext();
   const { savePage, isSaving, error } = useCmsAdmin();
   const pathname = usePathname() ?? "/";
@@ -193,19 +197,39 @@ export function AdminDrawer() {
     });
   }, [activeBlock, blocks, pathname, isDrawerOpen, setDrawerOpen]);
 
-  // Build the list of dirty updates. A draft is "dirty" if its serialised
-  // form differs from the saved value - JSON.stringify works for both
-  // primitives and our small `{src, alt}` / `{href, label}` shapes.
+  // Build the list of dirty updates. A block is "dirty" if its effective
+  // value (local draft, else server-side `draftValue`) differs from the
+  // published `block.value`. JSON.stringify works for both primitives and
+  // our small `{src, alt}` / `{href, label}` shapes.
+  //
+  // Local edits always win over server-side drafts - if the admin opened
+  // the page with a backend draft and then typed something, only their
+  // typed value is publish-worthy. The `seen` set dedupes when both layers
+  // exist for the same block.
   /** @type {UpdateBlockItem[]} */
   const dirtyUpdates = useMemo(() => {
+    /** @type {Set<string>} */
+    const seen = new Set();
     /** @type {UpdateBlockItem[]} */
     const out = [];
     for (const [blockPath, value] of drafts) {
       const block = blocks.get(blockPath);
       if (!block) continue;
-      if (JSON.stringify(value) !== JSON.stringify(block.value)) {
-        out.push({ blockPath, value, version: block.version });
-      }
+      if (JSON.stringify(value) === JSON.stringify(block.value)) continue;
+      out.push({ blockPath, value, version: block.version });
+      seen.add(blockPath);
+    }
+    for (const block of blocks.values()) {
+      if (block.draftValue == null) continue;
+      if (seen.has(block.blockPath)) continue;
+      // Backend's auto-clean already filters draft===published, but be
+      // defensive in case a stale optimistic update reaches us first.
+      if (JSON.stringify(block.draftValue) === JSON.stringify(block.value)) continue;
+      out.push({
+        blockPath: block.blockPath,
+        value: block.draftValue,
+        version: block.version,
+      });
     }
     return out;
   }, [drafts, blocks]);
@@ -225,7 +249,16 @@ export function AdminDrawer() {
   };
 
   const onDiscardAll = () => {
+    // Wipe local edits, then queue published values for any block that
+    // still has a server-side draft. The autosave effect picks those up
+    // 2s later and (because each value === published) the backend
+    // auto-cleans the corresponding Redis entries on receipt.
     clearDrafts();
+    for (const block of blocks.values()) {
+      if (block.draftValue != null) {
+        setDraft(block.blockPath, block.value);
+      }
+    }
   };
 
   const isConflict = error instanceof CmsApiError && error.isConflict;
@@ -243,7 +276,11 @@ export function AdminDrawer() {
         aria-hidden={!isDrawerOpen}
       >
         <div style={paneContainerStyle}>
-          <PanelHeader breadcrumbs={breadcrumbs} dirty={dirtyCount > 0} />
+          <PanelHeader
+            breadcrumbs={breadcrumbs}
+            dirty={dirtyCount > 0}
+            draftSyncStatus={draftSyncStatus}
+          />
 
           <TabBar
             activeTab={activeTab}
@@ -333,10 +370,28 @@ export function AdminDrawer() {
  * @param {{
  *   breadcrumbs: { label: string }[],
  *   dirty: boolean,
+ *   draftSyncStatus: "idle"|"saving"|"saved"|"failed",
  * }} props
  */
-function PanelHeader({ breadcrumbs, dirty }) {
+function PanelHeader({ breadcrumbs, dirty, draftSyncStatus }) {
   const pageLabel = breadcrumbs[breadcrumbs.length - 1]?.label ?? "";
+
+  // Pill state precedence: a transient save/fail pulse wins over the
+  // baseline dirty/clean colour so the admin sees autosave feedback even
+  // mid-edit. `saving` doesn't change the dot - the user is still editing,
+  // a colour shift mid-keystroke would feel jittery.
+  const dotColor = (() => {
+    if (draftSyncStatus === "saved") return STATUS_SAVED;
+    if (draftSyncStatus === "failed") return STATUS_FAILED;
+    return dirty ? ACCENT : "rgba(255,255,255,0.3)";
+  })();
+  const isPulsing = draftSyncStatus === "saved" || draftSyncStatus === "failed";
+  const title = (() => {
+    if (draftSyncStatus === "saving") return "Taslak kaydediliyor…";
+    if (draftSyncStatus === "saved") return "Taslak kaydedildi";
+    if (draftSyncStatus === "failed") return "Taslak kaydedilemedi";
+    return dirty ? "Kaydedilmemiş değişiklik var" : "Tüm değişiklikler kaydedildi";
+  })();
 
   return (
     <header style={headerStyle}>
@@ -360,15 +415,26 @@ function PanelHeader({ breadcrumbs, dirty }) {
       <div style={titleBarStyle}>
         <h2 style={pageTitleStyle}>{pageLabel}</h2>
         <span
-          style={statusPillStyle}
-          title={dirty ? "Kaydedilmemiş değişiklik var" : "Tüm değişiklikler kaydedildi"}
+          style={{
+            ...statusPillStyle,
+            padding: "4px 9px 4px 7px",
+          }}
+          title={title}
         >
           <span
+            // No re-key needed: every saved/failed signal first transitions
+            // through "saving" (className removed → animation killed) and
+            // then back to "saved"/"failed" (className re-added → animation
+            // restarts naturally). The background-color transition fades
+            // the dot smoothly between the four palette states.
+            className={isPulsing ? "skylab-cms-status-pulse" : undefined}
             style={{
               ...statusDotStyle,
-              background: dirty ? ACCENT : "rgba(255,255,255,0.3)",
+              background: dotColor,
+              transition: "background-color 320ms ease",
             }}
           />
+          <span style={statusLabelStyle}>Taslak</span>
         </span>
       </div>
     </header>
@@ -464,7 +530,7 @@ function GroupedBlockList({
                   hasDraft={drafts.has(chunk.block.blockPath)}
                   isActive={activeBlockPath === chunk.block.blockPath}
                   onChange={(v) => setDraft(chunk.block.blockPath, v)}
-                  onReset={() => clearDraft(chunk.block.blockPath)}
+                  onReset={() => resetBlock(chunk.block, setDraft, clearDraft)}
                   onFocus={() => onFocus(chunk.block.blockPath)}
                   itemSchema={itemSchemas.get(chunk.block.blockPath) ?? null}
                 />
@@ -544,7 +610,7 @@ function GroupCard({
                   hasDraft={drafts.has(block.blockPath)}
                   isActive={activeBlockPath === block.blockPath}
                   onChange={(v) => setDraft(block.blockPath, v)}
-                  onReset={() => clearDraft(block.blockPath)}
+                  onReset={() => resetBlock(block, setDraft, clearDraft)}
                   onFocus={() => onFocus(block.blockPath)}
                   itemSchema={itemSchemas.get(block.blockPath) ?? null}
                 />
@@ -630,9 +696,15 @@ function chunkBlocksByPrefix(blocks) {
  */
 function BlockCard({ block, draft, hasDraft, isActive, onChange, onReset, onFocus, itemSchema }) {
   const ref = useRef(/** @type {HTMLDivElement|null} */ (null));
-  const value = hasDraft ? draft : block.value;
-  const isDirty =
-    hasDraft && JSON.stringify(draft) !== JSON.stringify(block.value);
+  // Editor renders the local draft if mid-edit, else the backend-side
+  // overlay (`block.draftValue`), else the published value.
+  const effective = block.draftValue ?? block.value;
+  const value = hasDraft ? draft : effective;
+  // "Dirty" = anything in this block diverges from `block.value` (the
+  // published version). Covers both local edits and server-side drafts.
+  const isDirty = hasDraft
+    ? JSON.stringify(draft) !== JSON.stringify(block.value)
+    : block.draftValue != null;
 
   const [isOpen, setIsOpen] = useState(false);
 
@@ -838,6 +910,25 @@ function TypeChip({ type }) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Per-block undo. When a server-side draft exists, clearing the local
+ * entry alone wouldn't reach the backend; instead we set the local draft
+ * to the published value and let the autosave overwrite the Redis draft
+ * (backend then auto-cleans because draft===published). When there's no
+ * server-side draft, removing the local entry is enough.
+ *
+ * @param {BlockResponse} block
+ * @param {(blockPath: string, value: *) => void} setDraft
+ * @param {(blockPath: string) => void} clearDraft
+ */
+function resetBlock(block, setDraft, clearDraft) {
+  if (block.draftValue != null) {
+    setDraft(block.blockPath, block.value);
+  } else {
+    clearDraft(block.blockPath);
+  }
+}
 
 /**
  * `/about/team` → `[{label:"Anasayfa"}, {label:"About"}, {label:"Team"}]`.

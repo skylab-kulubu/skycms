@@ -15,6 +15,7 @@ import { usePathname } from "next/navigation";
 import { CmsContext } from "../lib/context.js";
 import { createCmsConfig } from "../lib/config.js";
 import { indexBlocksByPath } from "../lib/blocks.js";
+import { updateDraft } from "../lib/api-client.js";
 import { useCmsContent } from "../hooks/use-cms-content.js";
 
 /**
@@ -250,6 +251,164 @@ export function CmsProvider({
     if (fn) fn();
   }, []);
 
+  // ---- Draft autosave (PUT /cms/draft, 1s after last edit) ---------------
+  //
+  // Every keystroke updates `drafts`, which retriggers the debounce effect
+  // below; after 1s of silence we group the dirty edits by slug and PUT each
+  // group. Reads block/version/config/pathname through refs so unrelated
+  // re-renders (refetch, theme changes, ...) don't reset the timer - only a
+  // genuine `drafts` mutation does. A backend `updateContent` clears the
+  // overlay automatically, so there's no explicit cleanup path here.
+
+  const [draftSyncStatus, setDraftSyncStatus] = useState(
+    /** @type {"idle"|"saving"|"saved"|"failed"} */ ("idle"),
+  );
+
+  const blocksRef = useRef(blocks);
+  blocksRef.current = blocks;
+  const draftPathnameRef = useRef(pathname);
+  draftPathnameRef.current = pathname;
+  const isAdminRef = useRef(isAdmin);
+  isAdminRef.current = isAdmin;
+  const draftConfigRef = useRef(normalizedConfig);
+  draftConfigRef.current = normalizedConfig;
+
+  // Per-slug request chain. A fast typist can leave the previous PUT in
+  // flight when the next debounce fires; chaining each slug's request onto
+  // its predecessor guarantees the backend sees them in commit order and
+  // an older draft can never clobber a newer one. Across slugs we still
+  // parallelise (page + global header save independently).
+  const inFlightDraftPerSlug = useRef(
+    /** @type {Map<string, Promise<void>>} */ (new Map()),
+  );
+
+  // Pulse-and-reset for the panel status dot. After a saved/failed signal
+  // we drop back to idle ~1.2s later so the green/pink flash is purely
+  // transient and the dot returns to its dirty/clean baseline.
+  const draftStatusResetRef = useRef(
+    /** @type {ReturnType<typeof setTimeout>|null} */ (null),
+  );
+  const flashDraftStatus = useCallback(
+    /** @param {"saved"|"failed"} kind */
+    (kind) => {
+      setDraftSyncStatus(kind);
+      if (draftStatusResetRef.current) clearTimeout(draftStatusResetRef.current);
+      draftStatusResetRef.current = setTimeout(() => {
+        setDraftSyncStatus("idle");
+        draftStatusResetRef.current = null;
+      }, 900);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (draftStatusResetRef.current) clearTimeout(draftStatusResetRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isAdminRef.current) return;
+    if (drafts.size === 0) return;
+
+    const timer = setTimeout(async () => {
+      const currentBlocks = blocksRef.current;
+      const currentPathname = draftPathnameRef.current ?? "/";
+      const currentConfig = draftConfigRef.current;
+
+      // Skip entries that no longer differ from the effective value
+      // (`draftValue ?? value`): typing the same characters back to a
+      // saved draft, or the block being removed by a refetch. The
+      // comparison MUST be against the effective value so an undo
+      // (local draft set to published while a server draft exists)
+      // still sends a request - that's how the backend draft gets
+      // cleared.
+      /** @type {Map<string, import("../lib/schemas.js").UpdateBlockItem[]>} */
+      const bySlug = new Map();
+      for (const [blockPath, value] of drafts) {
+        const block = currentBlocks.get(blockPath);
+        if (!block) continue;
+        const effective = block.draftValue ?? block.value;
+        if (JSON.stringify(value) === JSON.stringify(effective)) continue;
+        const slug = block._slug ?? currentPathname;
+        const list = bySlug.get(slug) ?? [];
+        list.push({ blockPath, value, version: block.version });
+        bySlug.set(slug, list);
+      }
+      if (bySlug.size === 0) return;
+
+      const accessToken = (await stableGetAccessToken()) || undefined;
+      setDraftSyncStatus("saving");
+
+      const slugEntries = [...bySlug.entries()];
+      const results = await Promise.allSettled(
+        slugEntries.map(([slug, blocksForSlug]) => {
+          const previous =
+            inFlightDraftPerSlug.current.get(slug) ?? Promise.resolve();
+          const next = previous
+            .catch(() => {})
+            .then(() =>
+              updateDraft(
+                currentConfig,
+                { slug, blocks: blocksForSlug },
+                accessToken,
+              ),
+            );
+          inFlightDraftPerSlug.current.set(slug, next);
+          return next;
+        }),
+      );
+
+      // Optimistically reflect the backend's post-write state in the
+      // local blocks map: each block we just PUT now has draftValue
+      // equal to the value we sent, except when that value matches
+      // `block.value` (published) - in which case the backend
+      // auto-cleans and DraftValue becomes null. Without this update
+      // an undo would still see `draftValue` populated until the next
+      // refetch, leaving the dirty count and Save All button pointing
+      // at the stale draft.
+      results.forEach((r, i) => {
+        if (r.status !== "fulfilled") return;
+        const [, blocksForSlug] = slugEntries[i];
+        setBlocksState((prev) => {
+          let mutated = false;
+          const nextMap = new Map(prev);
+          for (const sent of blocksForSlug) {
+            const cur = nextMap.get(sent.blockPath);
+            if (!cur) continue;
+            const matchesPublished =
+              JSON.stringify(sent.value) === JSON.stringify(cur.value);
+            const newDraftValue = matchesPublished ? null : sent.value;
+            if (
+              JSON.stringify(cur.draftValue ?? null) ===
+              JSON.stringify(newDraftValue)
+            ) {
+              continue;
+            }
+            nextMap.set(sent.blockPath, { ...cur, draftValue: newDraftValue });
+            mutated = true;
+          }
+          return mutated ? nextMap : prev;
+        });
+      });
+
+      const anyFailed = results.some((r) => r.status === "rejected");
+      if (anyFailed) {
+        for (const r of results) {
+          if (r.status === "rejected") {
+            // eslint-disable-next-line no-console
+            console.warn("[skylab-cms] draft autosave failed:", r.reason);
+          }
+        }
+        flashDraftStatus("failed");
+      } else {
+        flashDraftStatus("saved");
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [drafts, stableGetAccessToken, flashDraftStatus]);
+
   const value = useMemo(
     () => ({
       config: normalizedConfig,
@@ -270,6 +429,7 @@ export function CmsProvider({
       unregisterItemSchema,
       onAfterSave: stableOnAfterSave,
       getAccessToken: stableGetAccessToken,
+      draftSyncStatus,
       isDrawerOpen,
       setDrawerOpen,
       userInfo,
@@ -294,6 +454,7 @@ export function CmsProvider({
       unregisterItemSchema,
       stableOnAfterSave,
       stableGetAccessToken,
+      draftSyncStatus,
       isDrawerOpen,
       setDrawerOpen,
       userInfo,

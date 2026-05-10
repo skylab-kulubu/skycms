@@ -45,6 +45,7 @@ import { headers } from "next/headers";
 import { getServerSession } from "next-auth";
 
 import { getCmsPageBlocks } from "./get-content.js";
+import { createCmsConfig } from "../lib/config.js";
 import { isCmsAdmin, readCmsAuthMeta } from "../auth/server/options.js";
 
 const PATHNAME_HEADER = "x-pathname";
@@ -107,6 +108,16 @@ export function createCmsPage(options) {
     throw new Error("createCmsPage: `config` option is required");
   }
 
+  // Normalize the raw config exactly once at factory build time. Without
+  // this, callers passing a plain `{ baseUrl, cdnUrl }` literal end up
+  // missing the defaulted fields (notably `globalSlug`), which makes the
+  // server-side `getCmsPageBlocks` skip the __global fetch - public
+  // visitors then render header/footer placeholders because the client
+  // refetch in `useCmsContent` is admin-gated and never runs for them.
+  const normalizedConfig = "baseUrl" in config && Object.isFrozen(config)
+    ? /** @type {import("../lib/config.js").CmsConfig} */ (config)
+    : createCmsConfig(config);
+
   const authMeta = authOptions ? readCmsAuthMeta(authOptions) : null;
   const resolvedGetSession =
     getSession ?? (authOptions ? () => getServerSession(authOptions) : null);
@@ -122,13 +133,13 @@ export function createCmsPage(options) {
 
     let initialBlocks = [];
     try {
-      initialBlocks = await getCmsPageBlocks(config, resolvedSlug);
+      initialBlocks = await getCmsPageBlocks(normalizedConfig, resolvedSlug);
     } catch {
       // Backend offline or page not yet synced - render with empty blocks.
     }
 
     return (
-      <Provider config={config} isAdmin={resolvedDeriveAdmin(session)} userSub={deriveUserSub(session)}
+      <Provider config={normalizedConfig} isAdmin={resolvedDeriveAdmin(session)} userSub={deriveUserSub(session)}
         initialBlocks={initialBlocks} onAfterSave={onAfterSave} session={session}
       >
         {children}

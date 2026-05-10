@@ -94,12 +94,14 @@ export function EditableRegion({ blockPath, as, blockType: _bt, defaultValue: _d
 
   const block = blocks.get(fullPath);
   const blockType = block ? block.blockType : null;
-  // Live preview: prefer the unsaved draft when the admin is mid-edit.
-  // `drafts.has` (not `??`) so an explicit empty/null draft still wins.
+  // Live preview: prefer the unsaved local draft when the admin is mid-edit,
+  // then the backend-side draft overlay (`block.draftValue`), then the
+  // published `block.value`. `drafts.has` (not `??`) so an explicit
+  // empty/null local draft still wins.
   const value = drafts.has(fullPath)
     ? drafts.get(fullPath)
     : block
-      ? block.value
+      ? (block.draftValue ?? block.value)
       : undefined;
   const empty = isValueEmpty(blockType, value);
 

@@ -41,6 +41,10 @@ import { createContext, useContext } from "react";
  * @property {(blockPath: string) => void} unregisterItemSchema
  * @property {((slug: string) => void | Promise<void>) | null} onAfterSave  Called after a successful save (typically a Server Action that calls `revalidateTag(cmsCacheTag(slug))`).
  * @property {(() => Promise<string>) | null} getAccessToken  Returns the current user's JWT access token; added as `Authorization: Bearer {token}` on write requests. Null in public/demo mode.
+ * @property {"idle"|"saving"|"saved"|"failed"} draftSyncStatus
+ *   Background `PUT /cms/draft` autosave state. `saved`/`failed` are
+ *   transient pulse signals - they clear back to `idle` after the panel's
+ *   status dot finishes its flash animation.
  * @property {boolean} isDrawerOpen      Admin-only: whether the editor drawer is expanded.
  * @property {(open: boolean) => void} setDrawerOpen  Admin-only: toggle the drawer.
  * @property {{ name: string|null, email: string|null, image: string|null } | null} userInfo  Admin-only: identity to display in the panel footer. Null when no session.
